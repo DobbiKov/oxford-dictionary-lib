@@ -1,4 +1,4 @@
-use loggit::{self, debug, trace};
+use loggit::{self, debug, info, trace};
 use reqwest::Client;
 use scraper::{html::Select, ElementRef, Html, Selector};
 use tokio;
@@ -7,23 +7,24 @@ use tokio;
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     loggit::logger::set_colorized(true);
     loggit::logger::set_global_formatting("{line}|<red>{level}<red>: {message}");
-    loggit::logger::set_log_level(loggit::Level::TRACE);
+    loggit::logger::set_log_level(loggit::Level::INFO);
 
-    let res = search_dictionary("inconvinence").await;
-    if let Err(e) = res {
-        println!("pizda, error nahuy");
-    } else {
-        let res_o = res.unwrap();
-        if res_o.is_none() {
-            println!("Net slova!");
-        } else {
-            println!("{:?}", res_o.unwrap());
+    let res = search_dictionary("incontinence").await?;
+    match res {
+        ParseLinkResult::ResultList(vec) => {
+            info!("Incorrect word, but here's variants: ");
+            vec.iter().for_each(|el| info!("{}", el));
         }
+        ParseLinkResult::MeaningsList(vec) => {
+            info!("Correct words, meamings:");
+            vec.iter().for_each(|el| info!("{}", el));
+        }
+        ParseLinkResult::None => info!("Couldn't find anythin!"),
     }
     Ok(())
 }
 
-async fn search_dictionary(word: &str) -> Result<Option<Vec<String>>, Box<dyn std::error::Error>> {
+async fn search_dictionary(word: &str) -> Result<ParseLinkResult, Box<dyn std::error::Error>> {
     //let link = format!(
     //    "https://www.oxfordlearnersdictionaries.com/definition/english/{}?q={}",
     //    &word, &word
@@ -32,16 +33,58 @@ async fn search_dictionary(word: &str) -> Result<Option<Vec<String>>, Box<dyn st
         "https://www.oxfordlearnersdictionaries.com/search/english/?q={}",
         word
     );
-    parse_meanings_by_link(link.as_str()).await
+
+    parse_link(link.as_str()).await
 }
 
-//async fn parse_link()
-//class to use for results: result-list
-async fn parse_meanings_by_link(
-    link: &str,
-) -> Result<Option<Vec<String>>, Box<dyn std::error::Error>> {
+enum ParseLinkResult {
+    ResultList(Vec<String>),
+    MeaningsList(Vec<String>),
+    None,
+}
+
+async fn parse_link(link: &str) -> Result<ParseLinkResult, Box<dyn std::error::Error>> {
     let body = reqwest::get(link).await?.text().await?;
     let document = Html::parse_document(&body);
+
+    let result_list_res = parse_result_list_by_document(document.clone()).await?;
+    let meanings_list_res = parse_meanings_by_document(document).await?;
+
+    if let Some(meaning_res) = meanings_list_res {
+        return Ok(ParseLinkResult::MeaningsList(meaning_res));
+    }
+    if let Some(result_res) = result_list_res {
+        return Ok(ParseLinkResult::ResultList(result_res));
+    }
+    return Ok(ParseLinkResult::None);
+}
+//class to use for results: result-list
+async fn parse_result_list_by_document(
+    document: Html,
+) -> Result<Option<Vec<String>>, Box<dyn std::error::Error>> {
+    let result_list_selector = Selector::parse("ul.result-list").unwrap();
+    let mut ul_res = document.select(&result_list_selector);
+    if let Some(ul_elem) = ul_res.next() {
+        let mut res: Vec<String> = Vec::new();
+        let ul_html = Html::parse_fragment(&ul_elem.html());
+
+        trace!("{}", ul_html.html());
+        trace!("");
+        let word_selector = Selector::parse("li > a.dym-link").unwrap();
+
+        let words_elems = ul_html.select(&word_selector);
+        for word_elem in words_elems {
+            trace!("{:?}", word_elem);
+            res.push(word_elem.text().next().unwrap_or("").to_string())
+        }
+        Ok(Some(res))
+    } else {
+        Ok(None)
+    }
+}
+async fn parse_meanings_by_document(
+    document: Html,
+) -> Result<Option<Vec<String>>, Box<dyn std::error::Error>> {
     let meaning_selector = Selector::parse("li.sense").unwrap();
     let meanings_html = document.select(&meaning_selector).collect::<Vec<_>>();
 
