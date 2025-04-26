@@ -2,7 +2,9 @@ use loggit::{self, debug, trace};
 use reqwest;
 use scraper::{html::Select, ElementRef, Html, Selector};
 
-pub async fn search_dictionary(word: &str) -> Result<ParseLinkResult, Box<dyn std::error::Error>> {
+pub async fn search_dictionary(
+    word: &str,
+) -> Result<ParseLinkResult, Box<dyn std::error::Error + Send + Sync>> {
     let link = format!(
         "https://www.oxfordlearnersdictionaries.com/search/english/?q={}",
         word
@@ -17,7 +19,9 @@ pub enum ParseLinkResult {
     None,
 }
 
-pub async fn parse_link(link: &str) -> Result<ParseLinkResult, Box<dyn std::error::Error>> {
+pub async fn parse_link(
+    link: &str,
+) -> Result<ParseLinkResult, Box<dyn std::error::Error + Send + Sync>> {
     let body = reqwest::get(link).await?.text().await?;
     let document = Html::parse_document(&body);
 
@@ -35,7 +39,7 @@ pub async fn parse_link(link: &str) -> Result<ParseLinkResult, Box<dyn std::erro
 //class to use for results: result-list
 async fn parse_result_list_by_document(
     document: Html,
-) -> Result<Option<Vec<String>>, Box<dyn std::error::Error>> {
+) -> Result<Option<Vec<String>>, Box<dyn std::error::Error + Send + Sync>> {
     let result_list_selector = Selector::parse("ul.result-list").unwrap();
     let mut ul_res = document.select(&result_list_selector);
     if let Some(ul_elem) = ul_res.next() {
@@ -58,7 +62,7 @@ async fn parse_result_list_by_document(
 }
 async fn parse_meanings_by_document(
     document: Html,
-) -> Result<Option<Vec<String>>, Box<dyn std::error::Error>> {
+) -> Result<Option<Vec<String>>, Box<dyn std::error::Error + Send + Sync>> {
     let meaning_selector = Selector::parse("li.sense").unwrap();
     let meanings_html = document.select(&meaning_selector).collect::<Vec<_>>();
 
