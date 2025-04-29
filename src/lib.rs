@@ -1,7 +1,21 @@
+//! A simple lightweight library for getting definitions and possible results from the Oxford
+//! Learner's dictionary.
+//!
+//! The library uses **reqwest** and **scraper** for scraping the Oxford Learner's Dictionary site
+//! and returning the scraped result.
+//!
+//! Main functions to use:
+//! * `search_dictionary` = searches by word
+//! * `parse_link` = tries to parse the provided link
+
 use loggit::{self, debug, trace};
 use reqwest;
 use scraper::{html::Select, ElementRef, Html, Selector};
 
+/// Main public function of the library, takes a word as an input and returns:
+/// - Possible scrapped [result](ParseLinkResult). Read the docs of the [`ParseLinkResult`] to know
+/// what result types can be returned.
+/// - An error (usually when the request or a scrapping failed)
 pub async fn search_dictionary(
     word: &str,
 ) -> Result<ParseLinkResult, Box<dyn std::error::Error + Send + Sync>> {
@@ -13,12 +27,24 @@ pub async fn search_dictionary(
     parse_link(link.as_str()).await
 }
 
+/// The result type of the main public functions of the crate
 pub enum ParseLinkResult {
+    /// If the provided word wasn't found, but the dictionary suggested similar words, this type is
+    /// returned with a vector of the suggested words
     ResultList(Vec<String>),
+
+    /// If the word was found, then this variant is returned with the list of definitions of the
+    /// word
     MeaningsList(Vec<String>),
+
+    /// If the request and scrapping succeded but there's no results at all, this variant is
+    /// returned
     None,
 }
 
+/// This function takes a link to parse and returns one of the next results:
+/// - Possible scrapped [result](ParseLinkResult)
+/// - An error (usually when the request or a scrapping failed)
 pub async fn parse_link(
     link: &str,
 ) -> Result<ParseLinkResult, Box<dyn std::error::Error + Send + Sync>> {
@@ -36,7 +62,10 @@ pub async fn parse_link(
     }
     return Ok(ParseLinkResult::None);
 }
-//class to use for results: result-list
+
+/// Parsing function for the similar words when the asked worked is not found
+///
+/// Takes an HTML element as a parameter
 async fn parse_result_list_by_document(
     document: Html,
 ) -> Result<Option<Vec<String>>, Box<dyn std::error::Error + Send + Sync>> {
@@ -60,6 +89,10 @@ async fn parse_result_list_by_document(
         Ok(None)
     }
 }
+
+/// Parsing function for the list of the meanings (definitions) of a given word
+///
+/// Takes an HTML element as a parameter
 async fn parse_meanings_by_document(
     document: Html,
 ) -> Result<Option<Vec<String>>, Box<dyn std::error::Error + Send + Sync>> {
